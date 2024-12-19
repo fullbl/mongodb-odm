@@ -789,7 +789,7 @@ EOT;
         $this->schemaManager->createDocumentCollection(TimeSeriesDocument::class, $maxTimeMs, $writeConcern);
     }
 
-    /** @psalm-param IndexOptions $expectedWriteOptions */
+    /** @phpstan-param IndexOptions $expectedWriteOptions */
     #[DataProvider('getWriteOptions')]
     public function testCreateCollections(array $expectedWriteOptions, ?int $maxTimeMs, ?WriteConcern $writeConcern): void
     {
