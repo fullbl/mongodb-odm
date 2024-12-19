@@ -291,4 +291,19 @@ final class MappingException extends BaseMappingException
             $fieldName,
         ));
     }
+
+    public static function emptySearchIndexDefinition(string $className, string $indexName): self
+    {
+        return new self(sprintf('%s search index "%s" must be dynamic or specify a field mapping', $className, $indexName));
+    }
+
+    public static function timeSeriesFieldNotFound(string $className, string $fieldName, string $field): self
+    {
+        return new self(sprintf(
+            'The %s field %s::%s was not found',
+            $field,
+            $className,
+            $fieldName,
+        ));
+    }
 }

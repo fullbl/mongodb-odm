@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Doctrine\ODM\MongoDB\Tests\Mapping;
 
+use DateTime;
 use Doctrine\ODM\MongoDB\Events;
 use Doctrine\ODM\MongoDB\Mapping\Annotations as ODM;
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadata;
 use Doctrine\ODM\MongoDB\Mapping\MappingException;
+use Doctrine\ODM\MongoDB\Mapping\TimeSeries\Granularity;
 use Doctrine\ODM\MongoDB\Repository\DocumentRepository;
 use Doctrine\ODM\MongoDB\Tests\BaseTestCase;
 use Doctrine\ODM\MongoDB\Tests\ClassMetadataTestUtil;
@@ -35,6 +37,7 @@ use Documents\UserRepository;
 use Documents\UserTyped;
 use Generator;
 use InvalidArgumentException;
+use MongoDB\BSON\Document;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ProxyManager\Proxy\GhostObjectInterface;
 use ReflectionClass;
@@ -42,8 +45,6 @@ use ReflectionException;
 use stdClass;
 
 use function array_merge;
-use function MongoDB\BSON\fromJSON;
-use function MongoDB\BSON\toPHP;
 use function serialize;
 use function unserialize;
 
@@ -78,7 +79,7 @@ class ClassMetadataTest extends BaseTestCase
         $cm->setVersioned(true);
         $cm->setVersionField('version');
         $validatorJson = '{ "$and": [ { "email": { "$regularExpression" : { "pattern": "@mongodb\\\\.com$", "options": "" } } } ] }';
-        $cm->setValidator(toPHP(fromJSON($validatorJson)));
+        $cm->setValidator(Document::fromJSON($validatorJson)->toPHP());
         $cm->setValidationAction(ClassMetadata::SCHEMA_VALIDATION_ACTION_WARN);
         $cm->setValidationLevel(ClassMetadata::SCHEMA_VALIDATION_LEVEL_OFF);
         self::assertIsArray($cm->getFieldMapping('phonenumbers'));
@@ -110,7 +111,7 @@ class ClassMetadataTest extends BaseTestCase
         self::assertEquals('lock', $cm->lockField);
         self::assertEquals(true, $cm->isVersioned);
         self::assertEquals('version', $cm->versionField);
-        self::assertEquals(toPHP(fromJSON($validatorJson)), $cm->getValidator());
+        self::assertEquals(Document::fromJSON($validatorJson)->toPHP(), $cm->getValidator());
         self::assertEquals(ClassMetadata::SCHEMA_VALIDATION_ACTION_WARN, $cm->getValidationAction());
         self::assertEquals(ClassMetadata::SCHEMA_VALIDATION_LEVEL_OFF, $cm->getValidationLevel());
     }
@@ -239,6 +240,7 @@ class ClassMetadataTest extends BaseTestCase
         $this->expectExceptionMessage(
             'Attempting to map a non-enum type Documents\Card as an enum: ',
         );
+        // @phpstan-ignore-next-line
         $cm->mapField([
             'fieldName' => 'enum',
             'enumType' => Card::class,
@@ -258,6 +260,7 @@ class ClassMetadataTest extends BaseTestCase
         $this->expectExceptionMessage(
             'Attempting to map a non-backed enum Documents\SuitNonBacked: ',
         );
+        // @phpstan-ignore-next-line
         $cm->mapField([
             'fieldName' => 'enum',
             'enumType' => SuitNonBacked::class,
@@ -540,6 +543,7 @@ class ClassMetadataTest extends BaseTestCase
 
         $proxy = $this->dm->getReference(Album::class, $document->getId());
         self::assertInstanceOf(GhostObjectInterface::class, $proxy);
+        self::assertInstanceOf(Album::class, $proxy);
 
         self::assertEquals('nevermind', $proxy->getName());
     }
@@ -969,6 +973,72 @@ class ClassMetadataTest extends BaseTestCase
         $cm = new ClassMetadata('stdClass');
         self::assertEquals(ClassMetadata::SCHEMA_VALIDATION_LEVEL_STRICT, $cm->getValidationLevel());
     }
+
+    public function testEmptySearchIndexDefinition(): void
+    {
+        $cm = new ClassMetadata('stdClass');
+
+        $this->expectException(MappingException::class);
+        $this->expectExceptionMessage('stdClass search index "default" must be dynamic or specify a field mapping');
+        $cm->addSearchIndex(['mappings' => []]);
+    }
+
+    public function testTimeSeriesMappingOnlyWithTimeField(): void
+    {
+        $metadata = $this->dm->getClassMetadata(TimeSeriesTestDocument::class);
+        $metadata->markAsTimeSeries(new ODM\TimeSeries('time'));
+
+        self::assertNotNull($metadata->timeSeriesOptions);
+        self::assertSame('time', $metadata->timeSeriesOptions->timeField);
+    }
+
+    public function testTimeSeriesMappingWithMissingTimeField(): void
+    {
+        $metadata = $this->dm->getClassMetadata(TimeSeriesTestDocument::class);
+
+        self::expectExceptionObject(MappingException::timeSeriesFieldNotFound(TimeSeriesTestDocument::class, 'foo', 'time'));
+        $metadata->markAsTimeSeries(new ODM\TimeSeries('foo'));
+    }
+
+    public function testTimeSeriesMappingWithMetadataField(): void
+    {
+        $metadata = $this->dm->getClassMetadata(TimeSeriesTestDocument::class);
+        $metadata->markAsTimeSeries(new ODM\TimeSeries('time', 'metadata'));
+
+        self::assertNotNull($metadata->timeSeriesOptions);
+        self::assertSame('metadata', $metadata->timeSeriesOptions->metaField);
+    }
+
+    public function testTimeSeriesMappingWithMissingMetadataField(): void
+    {
+        $metadata = $this->dm->getClassMetadata(TimeSeriesTestDocument::class);
+
+        self::expectExceptionObject(MappingException::timeSeriesFieldNotFound(TimeSeriesTestDocument::class, 'foo', 'metadata'));
+        $metadata->markAsTimeSeries(new ODM\TimeSeries('time', 'foo'));
+    }
+
+    public function testTimeSeriesMappingWithExpireAfterSeconds(): void
+    {
+        $metadata = $this->dm->getClassMetadata(TimeSeriesTestDocument::class);
+        $metadata->markAsTimeSeries(new ODM\TimeSeries('time', expireAfterSeconds: 10));
+
+        self::assertSame(10, $metadata->timeSeriesOptions->expireAfterSeconds);
+    }
+
+    public function testTimeSeriesMappingWithGranularityAndBucketMaxSpanSeconds(): void
+    {
+        $metadata = $this->dm->getClassMetadata(TimeSeriesTestDocument::class);
+        $metadata->markAsTimeSeries(new ODM\TimeSeries('time', granularity: Granularity::Hours, bucketMaxSpanSeconds: 15, bucketRoundingSeconds: 20));
+
+        /*
+         * We don't throw for invalid settings here, including:
+         * - bucketMaxSpanSeconds not being equal to bucketRoundingSeconds
+         * - granularity and bucket settings applied together
+         */
+        self::assertSame(Granularity::Hours, $metadata->timeSeriesOptions->granularity);
+        self::assertSame(15, $metadata->timeSeriesOptions->bucketMaxSpanSeconds);
+        self::assertSame(20, $metadata->timeSeriesOptions->bucketRoundingSeconds);
+    }
 }
 
 /** @template-extends DocumentRepository<self> */
@@ -996,4 +1066,17 @@ class EmbeddedAssociationsCascadeTest
     /** @var Address|null */
     #[ODM\EmbedOne(targetDocument: Address::class)]
     public $addresses;
+}
+
+#[ODM\Document]
+class TimeSeriesTestDocument
+{
+    #[ODM\Id]
+    public ?string $id = null;
+
+    #[ODM\Field]
+    public DateTime $time;
+
+    #[ODM\Field]
+    public string $metadata;
 }
