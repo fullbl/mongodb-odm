@@ -17,7 +17,7 @@ use Traversable;
  *
  * @internal
  *
- * @psalm-import-type Hints from UnitOfWork
+ * @phpstan-import-type Hints from UnitOfWork
  *
  * @template TDocument of object
  * @template-implements Iterator<TDocument>
@@ -30,7 +30,7 @@ final class HydratingIterator implements Iterator
     /**
      * @param Traversable<mixed, array<string, mixed>> $traversable
      * @param ClassMetadata<TDocument>                 $class
-     * @psalm-param Hints $unitOfWorkHints
+     * @phpstan-param Hints $unitOfWorkHints
      */
     public function __construct(Traversable $traversable, private UnitOfWork $unitOfWork, private ClassMetadata $class, private array $unitOfWorkHints = [])
     {
@@ -57,19 +57,16 @@ final class HydratingIterator implements Iterator
         return $this->getIterator()->key();
     }
 
-    /** @see http://php.net/iterator.next */
     public function next(): void
     {
         $this->getIterator()->next();
     }
 
-    /** @see http://php.net/iterator.rewind */
     public function rewind(): void
     {
         $this->getIterator()->rewind();
     }
 
-    /** @see http://php.net/iterator.valid */
     public function valid(): bool
     {
         return $this->key() !== null;

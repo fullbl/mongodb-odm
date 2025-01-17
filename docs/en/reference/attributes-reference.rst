@@ -1144,6 +1144,64 @@ for sharding the document collection.
         //...
     }
 
+#[TimeSeries]
+-------------
+
+This attribute may be used at the class level to mark a collection as containing
+:doc:`time-series data <../cookbook/time-series-data>`.
+
+.. code-block:: php
+
+    <?php
+
+    use Doctrine\ODM\MongoDB\Mapping\TimeSeries\Granularity;
+
+    #[Document]
+    #[TimeSeries(timeField: 'time', metaField: 'metadata', granularity: Granularity::Seconds)]
+    class Measurements
+    {
+        #[Id]
+        public string $id;
+
+        #[Field]
+        public DateTimeImmutable $time;
+
+        #[EmbedOne(targetDocument: MeasurementMetadata)]
+        public MeasurementMetadata $metadata;
+
+        #[Field]
+        public int $measurement;
+    }
+
+The ``timeField`` attribute is required and denotes the field where the time of
+a time series entry is stored. The following optional attributes may be set:
+
+-
+    ``metaField`` -  The name of the field which contains metadata in each time
+    series document. The field can be of any data type.
+
+-
+    ``granularity`` - Set the granularity to the value that most closely matches
+    the time between consecutive incoming timestamps. This allows MongoDB to
+    optimize how data is stored. Note: this attribute cannot be combined with
+    ``bucketMaxSpanSeconds`` and ``bucketRoundingSeconds``.
+
+-
+    ``bucketMaxSpanSeconds`` - Used with ``bucketRoundingSeconds`` as an
+    alternative to ``granularity``. Sets the maximum time between timestamps
+    in the same bucket. Possible values are 1 - 31356000.
+
+-
+    ``bucketRoundingSeconds`` - Used with ``bucketMaxSpanSeconds``, must be set
+    to the same value as ``bucketMaxSpanSeconds``. When a document requires a
+    new bucket, MongoDB rounds down the document's timestamp value by this
+    interval to set the minimum time for the bucket.
+
+-
+    ``expireAfterSeconds`` - Enables the automatic deletion of documents in a
+    time series collection by specifying the number of seconds after which
+    documents expire. MongoDB deletes these expired documents automatically.
+
 #[UniqueIndex]
 --------------
 
@@ -1177,7 +1235,7 @@ for the related collection.
    `Extended JSON specification <https://github.com/mongodb/specifications/blob/master/source/extended-json.rst>`_.
    The recommended way to fill up this property is to create a class constant
    (eg. ``::VALIDATOR``) using the
-   `HEREDOC/NOWDOC syntax <https://www.php.net/manual/en/language.types.string.php#language.types.string.syntax.nowdoc>`_
+   `HEREDOC/NOWDOC syntax <https://www.php.net/language.types.string#language.types.string.syntax.nowdoc>`_
    for clarity and to reference it as the attribute value.
 -
    ``action`` - Determines how MongoDB handles documents that violate
@@ -1340,6 +1398,6 @@ root class specified in the view mapping.
 .. _BSON specification: http://bsonspec.org/spec.html
 .. _DBRef: https://docs.mongodb.com/manual/reference/database-references/#dbrefs
 .. _geoNear command: https://docs.mongodb.com/manual/reference/command/geoNear/
-.. _MongoDB\BSON\ObjectId: https://www.php.net/manual/en/class.mongodb-bson-objectid.php
+.. _MongoDB\BSON\ObjectId: https://www.php.net/class.mongodb-bson-objectid
 .. |FQCN| raw:: html
   <abbr title="Fully-Qualified Class Name">FQCN</abbr>

@@ -3,7 +3,7 @@ Simple Search Engine
 
 It is very easy to implement a simple keyword search engine with MongoDB. Because of
 its flexible schema less nature we can store the keywords we want to search through directly
-on the document. MongoDB is capable of indexing the embedded documents so the results are fast
+on the document. MongoDB is capable of indexing an array field, so the results are fast
 and scalable.
 
 Sample Model: Product
@@ -25,15 +25,9 @@ setup a document like the following with a ``$keywords`` property that is mapped
         #[Field(type: 'string')]
         public string $title;
 
-        /** @var Collection<string> */
         #[Field(type: 'collection')]
         #[Index]
-        public Collection $keywords;
-
-        public function __construct()
-        {
-            $this->keywords = new ArrayCollection();
-        }
+        public array $keywords = [];
     }
 
 Working with Keywords
@@ -47,11 +41,11 @@ Now, create a product and add some keywords:
 
     $product = new Product();
     $product->title = 'Nike Air Jordan 2011';
-    $product->keywords->add('nike shoes');
-    $product->keywords->add('jordan shoes');
-    $product->keywords->add('air jordan');
-    $product->keywords->add('shoes');
-    $product->keywords->add('2011');
+    $product->keywords[] = 'nike shoes';
+    $product->keywords[] = 'jordan shoes';
+    $product->keywords[] = 'air jordan';
+    $product->keywords[] = 'shoes';
+    $product->keywords[] = '2011';
 
     $dm->persist($product);
     $dm->flush();
