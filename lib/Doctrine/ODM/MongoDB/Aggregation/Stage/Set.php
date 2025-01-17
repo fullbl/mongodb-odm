@@ -11,8 +11,9 @@ use Doctrine\ODM\MongoDB\Aggregation\Expr;
  *
  * @phpstan-import-type OperatorExpression from Expr
  * @phpstan-type SetStageExpression array{'$set': array<string, OperatorExpression|mixed>}
+ * @final
  */
-final class Set extends Operator
+class Set extends Operator
 {
     /** @phpstan-return SetStageExpression */
     public function getExpression(): array
