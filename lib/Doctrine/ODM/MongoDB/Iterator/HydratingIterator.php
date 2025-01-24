@@ -6,8 +6,8 @@ namespace Doctrine\ODM\MongoDB\Iterator;
 
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadata;
 use Doctrine\ODM\MongoDB\UnitOfWork;
-use Generator;
 use Iterator;
+use IteratorIterator;
 use ReturnTypeWillChange;
 use RuntimeException;
 use Traversable;
@@ -17,24 +17,25 @@ use Traversable;
  *
  * @internal
  *
- * @psalm-import-type Hints from UnitOfWork
+ * @phpstan-import-type Hints from UnitOfWork
  *
  * @template TDocument of object
  * @template-implements Iterator<TDocument>
  */
 final class HydratingIterator implements Iterator
 {
-    /** @var Generator<mixed, array<string, mixed>>|null */
-    private ?Generator $iterator;
+    /** @var Iterator<mixed, array<string, mixed>>|null */
+    private ?Iterator $iterator;
 
     /**
      * @param Traversable<mixed, array<string, mixed>> $traversable
      * @param ClassMetadata<TDocument>                 $class
-     * @psalm-param Hints $unitOfWorkHints
+     * @phpstan-param Hints $unitOfWorkHints
      */
     public function __construct(Traversable $traversable, private UnitOfWork $unitOfWork, private ClassMetadata $class, private array $unitOfWorkHints = [])
     {
-        $this->iterator = $this->wrapTraversable($traversable);
+        $this->iterator = new IteratorIterator($traversable);
+        $this->iterator->rewind();
     }
 
     public function __destruct()
@@ -56,26 +57,23 @@ final class HydratingIterator implements Iterator
         return $this->getIterator()->key();
     }
 
-    /** @see http://php.net/iterator.next */
     public function next(): void
     {
         $this->getIterator()->next();
     }
 
-    /** @see http://php.net/iterator.rewind */
     public function rewind(): void
     {
         $this->getIterator()->rewind();
     }
 
-    /** @see http://php.net/iterator.valid */
     public function valid(): bool
     {
         return $this->key() !== null;
     }
 
-    /** @return Generator<mixed, array<string, mixed>> */
-    private function getIterator(): Generator
+    /** @return Iterator<mixed, array<string, mixed>> */
+    private function getIterator(): Iterator
     {
         if ($this->iterator === null) {
             throw new RuntimeException('Iterator has already been destroyed');
@@ -92,17 +90,5 @@ final class HydratingIterator implements Iterator
     private function hydrate(?array $document): ?object
     {
         return $document !== null ? $this->unitOfWork->getOrCreateDocument($this->class->name, $document, $this->unitOfWorkHints) : null;
-    }
-
-    /**
-     * @param Traversable<mixed, array<string, mixed>> $traversable
-     *
-     * @return Generator<mixed, array<string, mixed>>
-     */
-    private function wrapTraversable(Traversable $traversable): Generator
-    {
-        foreach ($traversable as $key => $value) {
-            yield $key => $value;
-        }
     }
 }

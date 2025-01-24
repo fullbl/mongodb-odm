@@ -9,28 +9,25 @@ use Doctrine\ODM\MongoDB\DocumentManager;
 use Doctrine\ODM\MongoDB\Event\DocumentNotFoundEventArgs;
 use Doctrine\ODM\MongoDB\Events;
 use Doctrine\ODM\MongoDB\LockException;
+use Doctrine\ODM\MongoDB\Proxy\InternalProxy;
 use Doctrine\ODM\MongoDB\Tests\BaseTestCase;
 use Documents\Cart;
+use Documents\DocumentWithUnmappedProperties;
 use MongoDB\Client;
 use MongoDB\Collection;
 use MongoDB\Database;
 use PHPUnit\Framework\MockObject\MockObject;
 use ProxyManager\Proxy\GhostObjectInterface;
 
-class StaticProxyFactoryTest extends BaseTestCase
+class ProxyFactoryTest extends BaseTestCase
 {
     /** @var Client|MockObject */
     private Client $client;
 
-    public function setUp(): void
-    {
-        parent::setUp();
-
-        $this->dm = $this->createMockedDocumentManager();
-    }
-
     public function testProxyInitializeWithException(): void
     {
+        $this->dm = $this->createMockedDocumentManager();
+
         $collection = $this->createMock(Collection::class);
         $database   = $this->createMock(Database::class);
 
@@ -49,7 +46,7 @@ class StaticProxyFactoryTest extends BaseTestCase
         $uow = $this->dm->getUnitOfWork();
 
         $proxy = $this->dm->getReference(Cart::class, '123');
-        self::assertInstanceOf(GhostObjectInterface::class, $proxy);
+        self::assertTrue(self::isLazyObject($proxy));
 
         $closure = static function (DocumentNotFoundEventArgs $eventArgs) {
             self::fail('DocumentNotFoundListener should not be called');
@@ -57,7 +54,7 @@ class StaticProxyFactoryTest extends BaseTestCase
         $this->dm->getEventManager()->addEventListener(Events::documentNotFound, new DocumentNotFoundListener($closure));
 
         try {
-            $proxy->initializeProxy();
+            $this->uow->initializeObject($proxy);
             self::fail('An exception should have been thrown');
         } catch (LockException $exception) {
             self::assertInstanceOf(LockException::class, $exception);
@@ -65,7 +62,7 @@ class StaticProxyFactoryTest extends BaseTestCase
 
         $uow->computeChangeSets();
 
-        self::assertFalse($proxy->isProxyInitialized(), 'Proxy should not be initialized');
+        self::assertTrue($this->uow->isUninitializedObject($proxy), 'Proxy should not be initialized');
     }
 
     public function tearDown(): void
@@ -80,6 +77,21 @@ class StaticProxyFactoryTest extends BaseTestCase
         $this->client = $this->createMock(Client::class);
 
         return DocumentManager::create($this->client, $config);
+    }
+
+    public function testCreateProxyForDocumentWithUnmappedProperties(): void
+    {
+        $proxy = $this->dm->getReference(DocumentWithUnmappedProperties::class, '123');
+        self::assertTrue(self::isLazyObject($proxy));
+
+        // Disable initializer so we can access properties without initialising the object
+        if ($proxy instanceof InternalProxy) {
+            $proxy->__setInitialized(true);
+        } elseif ($proxy instanceof GhostObjectInterface) {
+            $proxy->setProxyInitializer(null);
+        }
+
+        self::assertSame('bar', $proxy->foo);
     }
 }
 

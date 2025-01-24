@@ -36,8 +36,8 @@ use function sprintf;
 use function str_contains;
 
 /**
- * @psalm-import-type IndexMapping from ClassMetadata
- * @psalm-import-type IndexOptions from ClassMetadata
+ * @phpstan-import-type IndexMapping from ClassMetadata
+ * @phpstan-import-type IndexOptions from ClassMetadata
  */
 final class SchemaManager
 {
@@ -103,7 +103,7 @@ final class SchemaManager
      * Indexes that exist in MongoDB but not the document metadata will be
      * deleted.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -150,9 +150,9 @@ final class SchemaManager
     }
 
     /**
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
-     * @psalm-return IndexMapping[]
+     * @phpstan-return IndexMapping[]
      */
     public function getDocumentIndexes(string $documentName): array
     {
@@ -162,10 +162,10 @@ final class SchemaManager
     }
 
     /**
-     * @psalm-param class-string $documentName
-     * @psalm-param array<class-string, bool> $visited
+     * @param class-string              $documentName
+     * @param array<class-string, bool> $visited
      *
-     * @psalm-return IndexMapping[]
+     * @phpstan-return IndexMapping[]
      */
     private function doGetDocumentIndexes(string $documentName, array &$visited): array
     {
@@ -233,7 +233,7 @@ final class SchemaManager
     /**
      * @param ClassMetadata<object> $class
      *
-     * @psalm-return IndexMapping[]
+     * @phpstan-return IndexMapping[]
      */
     private function prepareIndexes(ClassMetadata $class): array
     {
@@ -266,7 +266,7 @@ final class SchemaManager
     /**
      * Ensure the given document's indexes are created.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -310,7 +310,7 @@ final class SchemaManager
     /**
      * Delete the given document's indexes.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -341,7 +341,7 @@ final class SchemaManager
     /**
      * Create search indexes for the given document class.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -396,7 +396,7 @@ final class SchemaManager
      * Search indexes will be updated using the definitions in the document
      * metadata. Search indexes not defined in the metadata will be deleted.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -413,7 +413,9 @@ final class SchemaManager
 
         $definedNames = array_column($searchIndexes, 'name');
         try {
-            $existingNames = array_column(iterator_to_array($collection->listSearchIndexes()), 'name');
+            /* The typeMap option can be removed when bug is fixed in the minimum required version.
+             * https://jira.mongodb.org/browse/PHPLIB-1548 */
+            $existingNames = array_column(iterator_to_array($collection->listSearchIndexes(['typeMap' => ['root' => 'array']])), 'name');
         } catch (CommandException $e) {
             /* If $listSearchIndexes doesn't exist, only throw if search indexes have been defined.
              * If no search indexes are defined and the server doesn't support search indexes, there's
@@ -451,7 +453,7 @@ final class SchemaManager
     /**
      * Delete search indexes for the given document class.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -465,7 +467,9 @@ final class SchemaManager
         $collection = $this->dm->getDocumentCollection($class->name);
 
         try {
-            $searchIndexes = $collection->listSearchIndexes();
+            /* The typeMap option can be removed when bug is fixed in the minimum required version.
+             * https://jira.mongodb.org/browse/PHPLIB-1548 */
+            $searchIndexes = $collection->listSearchIndexes(['typeMap' => ['root' => 'array']]);
         } catch (CommandException $e) {
             // If the server does not support search indexes, there are no indexes to remove in any case
             if ($this->isSearchIndexCommandException($e)) {
@@ -497,7 +501,7 @@ final class SchemaManager
     /**
      * Ensure collection validators are up to date for the mapped document class.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      */
     public function updateDocumentValidator(string $documentName, ?int $maxTimeMs = null, ?WriteConcern $writeConcern = null): void
     {
@@ -566,7 +570,7 @@ final class SchemaManager
     /**
      * Create the document collection for a mapped class.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -621,6 +625,24 @@ final class SchemaManager
             $options['validationLevel']  = $class->getValidationLevel();
         }
 
+        if ($class->timeSeriesOptions !== null) {
+            $options['timeseries'] = array_filter(
+                [
+                    'timeField' => $class->timeSeriesOptions->timeField,
+                    'metaField' => $class->timeSeriesOptions->metaField,
+                    // ext-mongodb will automatically encode backed enums, so we can use the value directly here
+                    'granularity' => $class->timeSeriesOptions->granularity,
+                    'bucketMaxSpanSeconds' => $class->timeSeriesOptions->bucketMaxSpanSeconds,
+                    'bucketRoundingSeconds' => $class->timeSeriesOptions->bucketRoundingSeconds,
+                ],
+                static fn (mixed $value): bool => $value !== null,
+            );
+
+            if ($class->timeSeriesOptions->expireAfterSeconds) {
+                $options['expireAfterSeconds'] = $class->timeSeriesOptions->expireAfterSeconds;
+            }
+        }
+
         $this->dm->getDocumentDatabase($documentName)->createCollection(
             $class->getCollection(),
             $this->getWriteOptions($maxTimeMs, $writeConcern, $options),
@@ -644,7 +666,7 @@ final class SchemaManager
     /**
      * Drop the document collection for a mapped class.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -683,7 +705,7 @@ final class SchemaManager
     /**
      * Drop the document database for a mapped class.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws InvalidArgumentException
      */
@@ -697,7 +719,7 @@ final class SchemaManager
         $this->dm->getDocumentDatabase($documentName)->drop($this->getWriteOptions($maxTimeMs, $writeConcern));
     }
 
-    /** @psalm-param IndexMapping $documentIndex */
+    /** @phpstan-param IndexMapping $documentIndex */
     public function isMongoIndexEquivalentToDocumentIndex(IndexInfo $mongoIndex, array $documentIndex): bool
     {
         return $this->isEquivalentIndexKeys($mongoIndex, $documentIndex) && $this->isEquivalentIndexOptions($mongoIndex, $documentIndex);
@@ -707,7 +729,7 @@ final class SchemaManager
      * Determine if the keys for a MongoDB index can be considered equivalent to
      * those for an index in class metadata.
      *
-     * @psalm-param IndexMapping $documentIndex
+     * @phpstan-param IndexMapping $documentIndex
      */
     private function isEquivalentIndexKeys(IndexInfo $mongoIndex, array $documentIndex): bool
     {
@@ -735,7 +757,7 @@ final class SchemaManager
             $mongoIndexKeys == $documentIndexKeys;
     }
 
-    /** @psalm-param IndexMapping $documentIndex */
+    /** @phpstan-param IndexMapping $documentIndex */
     private function hasTextIndexesAtSamePosition(IndexInfo $mongoIndex, array $documentIndex): bool
     {
         $mongoIndexKeys    = $mongoIndex['key'];
@@ -771,7 +793,7 @@ final class SchemaManager
      * The background option is only relevant to index creation and is not
      * considered.
      *
-     * @psalm-param IndexMapping $documentIndex
+     * @phpstan-param IndexMapping $documentIndex
      */
     private function isEquivalentIndexOptions(IndexInfo $mongoIndex, array $documentIndex): bool
     {
@@ -836,8 +858,8 @@ final class SchemaManager
      * Options added to the ALLOWED_MISSING_INDEX_OPTIONS constant are ignored
      * and are expected to be checked later
      *
-     * @psalm-param IndexOptions $mongoIndexOptions
-     * @psalm-param IndexOptions $documentIndexOptions
+     * @phpstan-param IndexOptions $mongoIndexOptions
+     * @phpstan-param IndexOptions $documentIndexOptions
      */
     private function indexOptionsAreMissing(array $mongoIndexOptions, array $documentIndexOptions): bool
     {
@@ -852,7 +874,7 @@ final class SchemaManager
      * Determine if the text index weights for a MongoDB index can be considered
      * equivalent to those for an index in class metadata.
      *
-     * @psalm-param IndexMapping $documentIndex
+     * @phpstan-param IndexMapping $documentIndex
      */
     private function isEquivalentTextIndexWeights(IndexInfo $mongoIndex, array $documentIndex): bool
     {
@@ -900,7 +922,7 @@ final class SchemaManager
     /**
      * Ensure sharding for collection by document name.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws MongoDBException
      */
@@ -927,7 +949,7 @@ final class SchemaManager
     /**
      * Enable sharding for database which contains documents with given name.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      *
      * @throws MongoDBException
      */
@@ -948,7 +970,7 @@ final class SchemaManager
         }
     }
 
-    /** @psalm-param class-string $documentName */
+    /** @param class-string $documentName */
     private function runShardCollectionCommand(string $documentName, ?WriteConcern $writeConcern = null): void
     {
         $class    = $this->dm->getClassMetadata($documentName);
@@ -1019,7 +1041,7 @@ final class SchemaManager
         $filesCollection->createIndex(self::GRIDFS_CHUNKS_COLLECTION_INDEX, $this->getWriteOptions($maxTimeMs, $writeConcern, ['background' => $background]));
     }
 
-    /** @psalm-param class-string $documentName */
+    /** @param class-string $documentName */
     private function collectionIsSharded(string $documentName): bool
     {
         $class = $this->dm->getClassMetadata($documentName);

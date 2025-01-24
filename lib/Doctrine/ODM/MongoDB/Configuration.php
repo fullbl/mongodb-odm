@@ -24,6 +24,7 @@ use Doctrine\ODM\MongoDB\Repository\RepositoryFactory;
 use Doctrine\Persistence\Mapping\Driver\MappingDriver;
 use Doctrine\Persistence\ObjectRepository;
 use InvalidArgumentException;
+use LogicException;
 use MongoDB\Driver\WriteConcern;
 use ProxyManager\Configuration as ProxyManagerConfiguration;
 use ProxyManager\Factory\LazyLoadingGhostFactory;
@@ -33,6 +34,7 @@ use Psr\Cache\CacheItemPoolInterface;
 use ReflectionClass;
 
 use function array_key_exists;
+use function class_exists;
 use function interface_exists;
 use function trigger_deprecation;
 use function trim;
@@ -47,7 +49,7 @@ use function trim;
  *     $config = new Configuration();
  *     $dm = DocumentManager::create(new Connection(), $config);
  *
- * @psalm-import-type CommitOptions from UnitOfWork
+ * @phpstan-import-type CommitOptions from UnitOfWork
  */
 class Configuration
 {
@@ -83,11 +85,22 @@ class Configuration
     public const AUTOGENERATE_EVAL = 3;
 
     /**
+     * Autogenerate the proxy class when the proxy file does not exist or
+     * when the proxied file changed.
+     *
+     * This strategy causes a file_exists() call whenever any proxy is used the
+     * first time in a request. When the proxied file is changed, the proxy will
+     * be updated.
+     */
+    public const AUTOGENERATE_FILE_NOT_EXISTS_OR_CHANGED = 4;
+
+    /**
      * Array of attributes for this configuration instance.
      *
-     * @psalm-var array{
+     * @phpstan-var array{
      *      autoGenerateHydratorClasses?: self::AUTOGENERATE_*,
      *      autoGeneratePersistentCollectionClasses?: self::AUTOGENERATE_*,
+     *      autoGenerateProxyClasses?: self::AUTOGENERATE_*,
      *      classMetadataFactoryName?: class-string<ClassMetadataFactoryInterface>,
      *      defaultCommitOptions?: CommitOptions,
      *      defaultDocumentRepositoryClassName?: class-string<ObjectRepository<object>>,
@@ -106,6 +119,8 @@ class Configuration
      *      persistentCollectionGenerator?: PersistentCollectionGenerator,
      *      persistentCollectionDir?: string,
      *      persistentCollectionNamespace?: string,
+     *      proxyDir?: string,
+     *      proxyNamespace?: string,
      *      repositoryFactory?: RepositoryFactory
      * }
      */
@@ -113,17 +128,12 @@ class Configuration
 
     private ?CacheItemPoolInterface $metadataCache = null;
 
+    /** @deprecated */
     private ProxyManagerConfiguration $proxyManagerConfiguration;
-
-    private int $autoGenerateProxyClasses = self::AUTOGENERATE_EVAL;
 
     private bool $useTransactionalFlush = false;
 
-    public function __construct()
-    {
-        $this->proxyManagerConfiguration = new ProxyManagerConfiguration();
-        $this->setAutoGenerateProxyClasses(self::AUTOGENERATE_FILE_NOT_EXISTS);
-    }
+    private bool $useLazyGhostObject = false;
 
     /**
      * Adds a namespace under a certain alias.
@@ -248,14 +258,8 @@ class Configuration
      */
     public function setProxyDir(string $dir): void
     {
-        $this->getProxyManagerConfiguration()->setProxiesTargetDir($dir);
-
-        // Recreate proxy generator to ensure its path was updated
-        if ($this->autoGenerateProxyClasses !== self::AUTOGENERATE_FILE_NOT_EXISTS) {
-            return;
-        }
-
-        $this->setAutoGenerateProxyClasses($this->autoGenerateProxyClasses);
+        $this->attributes['proxyDir'] = $dir;
+        unset($this->proxyManagerConfiguration);
     }
 
     /**
@@ -263,53 +267,43 @@ class Configuration
      */
     public function getProxyDir(): ?string
     {
-        return $this->getProxyManagerConfiguration()->getProxiesTargetDir();
+        return $this->attributes['proxyDir'] ?? null;
     }
 
     /**
      * Gets an int flag that indicates whether proxy classes should always be regenerated
      * during each script execution.
+     *
+     * @return self::AUTOGENERATE_*
      */
     public function getAutoGenerateProxyClasses(): int
     {
-        return $this->autoGenerateProxyClasses;
+        return $this->attributes['autoGenerateProxyClasses'] ?? self::AUTOGENERATE_FILE_NOT_EXISTS;
     }
 
     /**
      * Sets an int flag that indicates whether proxy classes should always be regenerated
      * during each script execution.
      *
+     * @param self::AUTOGENERATE_* $mode
+     *
      * @throws InvalidArgumentException If an invalid mode was given.
      */
     public function setAutoGenerateProxyClasses(int $mode): void
     {
-        $this->autoGenerateProxyClasses = $mode;
-        $proxyManagerConfig             = $this->getProxyManagerConfiguration();
-
-        switch ($mode) {
-            case self::AUTOGENERATE_FILE_NOT_EXISTS:
-                $proxyManagerConfig->setGeneratorStrategy(new FileWriterGeneratorStrategy(
-                    new FileLocator($proxyManagerConfig->getProxiesTargetDir()),
-                ));
-
-                break;
-            case self::AUTOGENERATE_EVAL:
-                $proxyManagerConfig->setGeneratorStrategy(new EvaluatingGeneratorStrategy());
-
-                break;
-            default:
-                throw new InvalidArgumentException('Invalid proxy generation strategy given - only AUTOGENERATE_FILE_NOT_EXISTS and AUTOGENERATE_EVAL are supported.');
-        }
+        $this->attributes['autoGenerateProxyClasses'] = $mode;
+        unset($this->proxyManagerConfiguration);
     }
 
     public function getProxyNamespace(): ?string
     {
-        return $this->getProxyManagerConfiguration()->getProxiesNamespace();
+        return $this->attributes['proxyNamespace'] ?? null;
     }
 
     public function setProxyNamespace(string $ns): void
     {
-        $this->getProxyManagerConfiguration()->setProxiesNamespace($ns);
+        $this->attributes['proxyNamespace'] = $ns;
+        unset($this->proxyManagerConfiguration);
     }
 
     public function setHydratorDir(string $dir): void
@@ -326,7 +320,7 @@ class Configuration
      * Gets an int flag that indicates whether hydrator classes should always be regenerated
      * during each script execution.
      *
-     * @psalm-return self::AUTOGENERATE_*
+     * @return self::AUTOGENERATE_*
      */
     public function getAutoGenerateHydratorClasses(): int
     {
@@ -337,7 +331,7 @@ class Configuration
      * Sets an int flag that indicates whether hydrator classes should always be regenerated
      * during each script execution.
      *
-     * @psalm-param self::AUTOGENERATE_* $mode
+     * @param self::AUTOGENERATE_* $mode
      */
     public function setAutoGenerateHydratorClasses(int $mode): void
     {
@@ -368,7 +362,7 @@ class Configuration
      * Gets a integer flag that indicates how and when persistent collection
      * classes should be generated.
      *
-     * @psalm-return self::AUTOGENERATE_*
+     * @return self::AUTOGENERATE_*
      */
     public function getAutoGeneratePersistentCollectionClasses(): int
     {
@@ -379,7 +373,7 @@ class Configuration
      * Sets a integer flag that indicates how and when persistent collection
      * classes should be generated.
      *
-     * @psalm-param self::AUTOGENERATE_* $mode
+     * @param self::AUTOGENERATE_* $mode
      */
     public function setAutoGeneratePersistentCollectionClasses(int $mode): void
     {
@@ -414,7 +408,7 @@ class Configuration
     }
 
     /**
-     * @psalm-param class-string<ClassMetadataFactoryInterface> $cmfName
+     * @param class-string<ClassMetadataFactoryInterface> $cmfName
      *
      * @throws MongoDBException If is not a ClassMetadataFactoryInterface.
      */
@@ -429,7 +423,7 @@ class Configuration
         $this->attributes['classMetadataFactoryName'] = $cmfName;
     }
 
-    /** @psalm-return class-string<ClassMetadataFactoryInterface> */
+    /** @return class-string<ClassMetadataFactoryInterface> */
     public function getClassMetadataFactoryName(): string
     {
         if (! isset($this->attributes['classMetadataFactoryName'])) {
@@ -439,7 +433,7 @@ class Configuration
         return $this->attributes['classMetadataFactoryName'];
     }
 
-    /** @psalm-return CommitOptions */
+    /** @phpstan-return CommitOptions */
     public function getDefaultCommitOptions(): array
     {
         if (! isset($this->attributes['defaultCommitOptions'])) {
@@ -449,7 +443,7 @@ class Configuration
         return $this->attributes['defaultCommitOptions'];
     }
 
-    /** @psalm-param CommitOptions $defaultCommitOptions */
+    /** @phpstan-param CommitOptions $defaultCommitOptions */
     public function setDefaultCommitOptions(array $defaultCommitOptions): void
     {
         foreach (UnitOfWork::DEPRECATED_WRITE_OPTIONS as $deprecatedOption) {
@@ -470,7 +464,7 @@ class Configuration
      * Add a filter to the list of possible filters.
      *
      * @param array<string, mixed> $parameters
-     * @psalm-param class-string $className
+     * @param class-string         $className
      */
     public function addFilter(string $name, string $className, array $parameters = []): void
     {
@@ -480,7 +474,7 @@ class Configuration
         ];
     }
 
-    /** @psalm-return class-string|null */
+    /** @return class-string|null */
     public function getFilterClassName(string $name): ?string
     {
         return isset($this->attributes['filters'][$name])
@@ -497,7 +491,7 @@ class Configuration
     }
 
     /**
-     * @psalm-param class-string<ObjectRepository<object>> $className
+     * @param class-string<ObjectRepository<object>> $className
      *
      * @throws MongoDBException If is not an ObjectRepository.
      */
@@ -512,14 +506,14 @@ class Configuration
         $this->attributes['defaultDocumentRepositoryClassName'] = $className;
     }
 
-    /** @psalm-return class-string<ObjectRepository<object>> */
+    /** @return class-string<ObjectRepository<object>> */
     public function getDefaultDocumentRepositoryClassName(): string
     {
         return $this->attributes['defaultDocumentRepositoryClassName'] ?? DocumentRepository::class;
     }
 
     /**
-     * @psalm-param class-string<GridFSRepository<object>> $className
+     * @param class-string<GridFSRepository<object>> $className
      *
      * @throws MongoDBException If the class does not implement the GridFSRepository interface.
      */
@@ -534,7 +528,7 @@ class Configuration
         $this->attributes['defaultGridFSRepositoryClassName'] = $className;
     }
 
-    /** @psalm-return class-string<GridFSRepository<object>> */
+    /** @return class-string<GridFSRepository<object>> */
     public function getDefaultGridFSRepositoryClassName(): string
     {
         return $this->attributes['defaultGridFSRepositoryClassName'] ?? DefaultGridFSRepository::class;
@@ -589,14 +583,39 @@ class Configuration
         return $this->attributes['persistentCollectionGenerator'];
     }
 
+    /** @deprecated */
     public function buildGhostObjectFactory(): LazyLoadingGhostFactory
     {
-        return new LazyLoadingGhostFactory(clone $this->getProxyManagerConfiguration());
+        return new LazyLoadingGhostFactory($this->getProxyManagerConfiguration());
     }
 
+    /** @deprecated */
     public function getProxyManagerConfiguration(): ProxyManagerConfiguration
     {
-        return $this->proxyManagerConfiguration;
+        if (isset($this->proxyManagerConfiguration)) {
+            return $this->proxyManagerConfiguration;
+        }
+
+        $proxyManagerConfiguration = new ProxyManagerConfiguration();
+        $proxyManagerConfiguration->setProxiesTargetDir($this->getProxyDir());
+        $proxyManagerConfiguration->setProxiesNamespace($this->getProxyNamespace());
+
+        switch ($this->getAutoGenerateProxyClasses()) {
+            case self::AUTOGENERATE_FILE_NOT_EXISTS:
+                $proxyManagerConfiguration->setGeneratorStrategy(new FileWriterGeneratorStrategy(
+                    new FileLocator($proxyManagerConfiguration->getProxiesTargetDir()),
+                ));
+
+                break;
+            case self::AUTOGENERATE_EVAL:
+                $proxyManagerConfiguration->setGeneratorStrategy(new EvaluatingGeneratorStrategy());
+
+                break;
+            default:
+                throw new InvalidArgumentException('Invalid proxy generation strategy given - only AUTOGENERATE_FILE_NOT_EXISTS and AUTOGENERATE_EVAL are supported.');
+        }
+
+        return $this->proxyManagerConfiguration = $proxyManagerConfiguration;
     }
 
     public function setUseTransactionalFlush(bool $useTransactionalFlush): void
@@ -607,6 +626,32 @@ class Configuration
     public function isTransactionalFlushEnabled(): bool
     {
         return $this->useTransactionalFlush;
+    }
+
+    /**
+     * Generate proxy classes using Symfony VarExporter's LazyGhostTrait if true.
+     * Otherwise, use ProxyManager's LazyLoadingGhostFactory (deprecated)
+     */
+    public function setUseLazyGhostObject(bool $flag): void
+    {
+        if ($flag === false) {
+            if (! class_exists(ProxyManagerConfiguration::class)) {
+                throw new LogicException('Package "friendsofphp/proxy-manager-lts" is required to disable LazyGhostObject.');
+            }
+
+            trigger_deprecation(
+                'doctrine/mongodb-odm',
+                '2.10',
+                'Using "friendsofphp/proxy-manager-lts" is deprecated. Use "symfony/var-exporter" LazyGhostObjects instead.',
+            );
+        }
+
+        $this->useLazyGhostObject = $flag;
+    }
+
+    public function isLazyGhostObjectEnabled(): bool
+    {
+        return $this->useLazyGhostObject;
     }
 }
 

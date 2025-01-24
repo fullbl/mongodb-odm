@@ -10,11 +10,13 @@ use Doctrine\ODM\MongoDB\Mapping\Annotations as ODM;
 use Doctrine\ODM\MongoDB\Mapping\Annotations\AbstractIndex;
 use Doctrine\ODM\MongoDB\Mapping\Annotations\SearchIndex;
 use Doctrine\ODM\MongoDB\Mapping\Annotations\ShardKey;
+use Doctrine\ODM\MongoDB\Mapping\Annotations\TimeSeries;
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadata;
 use Doctrine\ODM\MongoDB\Mapping\MappingException;
 use Doctrine\Persistence\Mapping\ClassMetadata as PersistenceClassMetadata;
 use Doctrine\Persistence\Mapping\Driver\ColocatedMappingDriver;
 use Doctrine\Persistence\Mapping\Driver\MappingDriver;
+use MongoDB\BSON\Document;
 use MongoDB\Driver\Exception\UnexpectedValueException;
 use ReflectionClass;
 use ReflectionMethod;
@@ -27,8 +29,6 @@ use function class_exists;
 use function constant;
 use function count;
 use function is_array;
-use function MongoDB\BSON\fromJSON;
-use function MongoDB\BSON\toPHP;
 use function trigger_deprecation;
 
 /**
@@ -133,12 +133,12 @@ class AttributeDriver implements MappingDriver
             } elseif ($attribute instanceof ODM\Validation) {
                 if (isset($attribute->validator)) {
                     try {
-                        $validatorBson = fromJSON($attribute->validator);
+                        $validatorBson = Document::fromJSON($attribute->validator);
                     } catch (UnexpectedValueException $e) {
                         throw MappingException::schemaValidationError($e->getCode(), $e->getMessage(), $className, 'validator');
                     }
 
-                    $validator = toPHP($validatorBson, []);
+                    $validator = $validatorBson->toPHP();
                     $metadata->setValidator($validator);
                 }
 
@@ -287,6 +287,12 @@ class AttributeDriver implements MappingDriver
         if (isset($classAttributes[ShardKey::class])) {
             assert($classAttributes[ShardKey::class] instanceof ShardKey);
             $this->setShardKey($metadata, $classAttributes[ShardKey::class]);
+        }
+
+        // Mark as time series only after mapping all fields
+        if (isset($classAttributes[TimeSeries::class])) {
+            assert($classAttributes[TimeSeries::class] instanceof TimeSeries);
+            $metadata->markAsTimeSeries($classAttributes[TimeSeries::class]);
         }
 
         foreach ($reflClass->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {

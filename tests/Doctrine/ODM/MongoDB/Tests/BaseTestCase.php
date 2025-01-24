@@ -7,6 +7,7 @@ namespace Doctrine\ODM\MongoDB\Tests;
 use Doctrine\ODM\MongoDB\Configuration;
 use Doctrine\ODM\MongoDB\DocumentManager;
 use Doctrine\ODM\MongoDB\Mapping\Driver\AttributeDriver;
+use Doctrine\ODM\MongoDB\Proxy\InternalProxy;
 use Doctrine\ODM\MongoDB\Tests\Query\Filter\Filter;
 use Doctrine\ODM\MongoDB\UnitOfWork;
 use Doctrine\Persistence\Mapping\Driver\MappingDriver;
@@ -15,6 +16,7 @@ use MongoDB\Driver\Manager;
 use MongoDB\Driver\Server;
 use MongoDB\Model\DatabaseInfo;
 use PHPUnit\Framework\TestCase;
+use ProxyManager\Proxy\LazyLoadingInterface;
 
 use function array_key_exists;
 use function array_map;
@@ -87,6 +89,7 @@ abstract class BaseTestCase extends TestCase
         $config->setPersistentCollectionNamespace('PersistentCollections');
         $config->setDefaultDB(DOCTRINE_MONGODB_DATABASE);
         $config->setMetadataDriverImpl(static::createMetadataDriverImpl());
+        $config->setUseLazyGhostObject((bool) $_ENV['USE_LAZY_GHOST_OBJECTS']);
 
         $config->addFilter('testFilter', Filter::class);
         $config->addFilter('testFilter2', Filter::class);
@@ -112,6 +115,11 @@ abstract class BaseTestCase extends TestCase
 
             self::$check($value, $array[$key], $message);
         }
+    }
+
+    public static function isLazyObject(object $document): bool
+    {
+        return $document instanceof InternalProxy || $document instanceof LazyLoadingInterface;
     }
 
     protected static function createMetadataDriverImpl(): MappingDriver
@@ -160,7 +168,7 @@ abstract class BaseTestCase extends TestCase
         }
     }
 
-    /** @psalm-param class-string $className */
+    /** @param class-string $className */
     protected function skipTestIfNotSharded(string $className): void
     {
         $result = $this->dm->getDocumentDatabase($className)->command(['listCommands' => true], ['typeMap' => DocumentManager::CLIENT_TYPEMAP])->toArray()[0];
@@ -172,7 +180,7 @@ abstract class BaseTestCase extends TestCase
         $this->markTestSkipped('Test skipped because server does not support sharding');
     }
 
-    /** @psalm-param class-string $className */
+    /** @param class-string $className */
     protected function skipTestIfSharded(string $className): void
     {
         $result = $this->dm->getDocumentDatabase($className)->command(['listCommands' => true], ['typeMap' => DocumentManager::CLIENT_TYPEMAP])->toArray()[0];

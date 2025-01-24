@@ -6,6 +6,7 @@ namespace Doctrine\ODM\MongoDB\Aggregation;
 
 use Doctrine\ODM\MongoDB\Aggregation\Stage\Sort;
 use Doctrine\ODM\MongoDB\DocumentManager;
+use Doctrine\ODM\MongoDB\Iterator\IterableResult;
 use Doctrine\ODM\MongoDB\Iterator\Iterator;
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadata;
 use Doctrine\ODM\MongoDB\Persisters\DocumentPersister;
@@ -28,9 +29,9 @@ use function trigger_deprecation;
 /**
  * Fluent interface for building aggregation pipelines.
  *
- * @psalm-import-type SortShape from Sort
- * @psalm-import-type StageExpression from Stage
- * @psalm-type PipelineExpression = list<StageExpression>
+ * @phpstan-import-type SortShape from Sort
+ * @phpstan-type StageExpression array<string, mixed>
+ * @phpstan-type PipelineExpression list<StageExpression>
  */
 class Builder
 {
@@ -44,7 +45,7 @@ class Builder
      */
     private ClassMetadata $class;
 
-    /** @psalm-var class-string */
+    /** @var class-string */
     private ?string $hydrationClass = null;
 
     /**
@@ -60,7 +61,7 @@ class Builder
     /**
      * Create a new aggregation builder.
      *
-     * @psalm-param class-string $documentName
+     * @param class-string $documentName
      */
     public function __construct(DocumentManager $dm, string $documentName)
     {
@@ -246,8 +247,10 @@ class Builder
      * Returns an aggregation object for the current pipeline
      *
      * @param array<string, mixed> $options
+     *
+     * @return Aggregation
      */
-    public function getAggregation(array $options = []): Aggregation
+    public function getAggregation(array $options = []): IterableResult
     {
         $class = $this->hydrationClass ? $this->dm->getClassMetadata($this->hydrationClass) : null;
 
@@ -270,8 +273,8 @@ class Builder
      * you should not apply filters as this may cause wrong results to be
      * given.
      *
-     * @return array<array<string, mixed>>
-     * @psalm-return PipelineExpression
+     * @return list<array<string, mixed>>
+     * @phpstan-return PipelineExpression
      */
     // phpcs:enable Squiz.Commenting.FunctionComment.ExtraParamComment
     public function getPipeline(/* bool $applyFilters = true */): array
@@ -609,7 +612,7 @@ class Builder
      *
      * @param array<string, int|string|array<string, string>>|string $fieldName Field name or array of field/order pairs
      * @param int|string|null                                        $order     Field order (if one field is specified)
-     * @psalm-param SortShape|string $fieldName Field name or array of field/order pairs
+     * @phpstan-param SortShape|string $fieldName Field name or array of field/order pairs
      */
     public function sort($fieldName, $order = null): Stage\Sort
     {
@@ -699,7 +702,7 @@ class Builder
      */
     private function applyFilters(array $query): array
     {
-        $documentPersister = $this->dm->getUnitOfWork()->getDocumentPersister($this->class->name);
+        $documentPersister = $this->getDocumentPersister();
 
         $query = $documentPersister->addDiscriminatorToPreparedQuery($query);
         $query = $documentPersister->addFilterToPreparedQuery($query);

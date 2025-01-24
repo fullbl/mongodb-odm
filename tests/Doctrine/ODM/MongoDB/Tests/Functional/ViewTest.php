@@ -10,7 +10,6 @@ use Doctrine\ODM\MongoDB\UnitOfWork;
 use Documents\CmsUser;
 use Documents\UserName;
 use Documents\ViewReference;
-use ProxyManager\Proxy\GhostObjectInterface;
 
 use function assert;
 
@@ -112,7 +111,7 @@ class ViewTest extends BaseTestCase
         $viewReference = $this->dm->find(ViewReference::class, $alcaeus->getId());
         self::assertInstanceOf(ViewReference::class, $viewReference);
 
-        self::assertInstanceOf(GhostObjectInterface::class, $viewReference->getReferenceOneView());
+        self::assertTrue(self::isLazyObject($viewReference->getReferenceOneView()));
         self::assertSame($malarzm->getId(), $viewReference->getReferenceOneView()->getId());
 
         // No proxies for inverse referenceOne
@@ -120,7 +119,7 @@ class ViewTest extends BaseTestCase
         self::assertSame($alcaeus->getId(), $viewReference->getReferenceOneViewMappedBy()->getId());
 
         self::assertCount(1, $viewReference->getReferenceManyView());
-        self::assertInstanceOf(GhostObjectInterface::class, $viewReference->getReferenceManyView()[0]);
+        self::assertTrue(self::isLazyObject($viewReference->getReferenceManyView()[0]));
         self::assertSame($malarzm->getId(), $viewReference->getReferenceManyView()[0]->getId());
 
         // No proxies for inverse referenceMany

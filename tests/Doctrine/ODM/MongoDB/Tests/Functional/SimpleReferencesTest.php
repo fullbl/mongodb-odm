@@ -8,7 +8,6 @@ use Doctrine\ODM\MongoDB\Tests\BaseTestCase;
 use Documents\SimpleReferenceUser;
 use Documents\User;
 use MongoDB\BSON\ObjectId;
-use ProxyManager\Proxy\GhostObjectInterface;
 use stdClass;
 
 use function assert;
@@ -84,10 +83,9 @@ class SimpleReferencesTest extends BaseTestCase
 
         self::assertNotNull($test);
         $user = $test->getUser();
-        assert($user instanceof User && $user instanceof GhostObjectInterface);
         self::assertNotNull($user);
         self::assertInstanceOf(User::class, $user);
-        self::assertInstanceOf(GhostObjectInterface::class, $user);
+        self::assertTrue(self::isLazyObject($user));
         self::assertTrue($this->uow->isUninitializedObject($user));
         self::assertEquals('jwage', $user->getUsername());
         self::assertFalse($this->uow->isUninitializedObject($user));

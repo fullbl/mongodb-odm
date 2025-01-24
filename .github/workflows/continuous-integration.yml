@@ -21,6 +21,7 @@ jobs:
           - "8.1"
           - "8.2"
           - "8.3"
+          - "8.4"
         mongodb-version:
           - "7.0"
           - "6.0"
@@ -33,6 +34,8 @@ jobs:
           - "highest"
         symfony-version:
           - "stable"
+        proxy:
+          - "lazy-ghost"
         include:
           # Test against lowest dependencies
           - dependencies: "lowest"
@@ -41,6 +44,7 @@ jobs:
             driver-version: "1.17.0"
             topology: "server"
             symfony-version: "stable"
+            proxy: "lazy-ghost"
           # Test with highest dependencies
           - topology: "server"
             php-version: "8.2"
@@ -48,6 +52,7 @@ jobs:
             driver-version: "stable"
             dependencies: "highest"
             symfony-version: "7"
+            proxy: "lazy-ghost"
           # Test with a 5.0 replica set
           - topology: "replica_set"
             php-version: "8.2"
@@ -55,13 +60,23 @@ jobs:
             driver-version: "stable"
             dependencies: "highest"
             symfony-version: "stable"
-          # Test with a 5.0 sharded cluster
-          - topology: "sharded_cluster"
-            php-version: "8.2"
+            proxy: "lazy-ghost"
+          # Test with ProxyManager
+          - php-version: "8.2"
             mongodb-version: "5.0"
             driver-version: "stable"
             dependencies: "highest"
             symfony-version: "stable"
+            proxy: "proxy-manager"
+          # Test with a 5.0 sharded cluster
+          # Currently disabled due to a bug where MongoDB reports "sharding status unknown"
+#          - topology: "sharded_cluster"
+#            php-version: "8.2"
+#            mongodb-version: "5.0"
+#            driver-version: "stable"
+#            dependencies: "highest"
+#            symfony-version: "stable"
+#            proxy: "lazy-ghost"
 
     steps:
       - name: "Checkout"
@@ -104,8 +119,6 @@ jobs:
         if: "${{ matrix.symfony-version == '7' }}"
         run: |
           composer config minimum-stability dev
-          # not yet ready for v7
-          composer remove --no-update --dev vimeo/psalm
           # update symfony deps
           composer require --no-update symfony/console:^7@dev
           composer require --no-update symfony/var-dumper:^7@dev
@@ -117,12 +130,10 @@ jobs:
           dependency-versions: "${{ matrix.dependencies }}"
           composer-options: "--prefer-dist"
 
-      - name: "Upload composer.lock as build artifact"
-        uses: actions/upload-artifact@v4
+      - name: "Install latest Python version"
+        uses: actions/setup-python@v5
         with:
-          name: "composer-lock-phpunit-${{ matrix.php-version }}-${{ matrix.dependencies }}-${{ matrix.mongodb-version }}"
-          path: composer.lock
-          overwrite: true
+          python-version: '3.13'
 
       - id: setup-mongodb
         uses: mongodb-labs/drivers-evergreen-tools@master
@@ -134,3 +145,4 @@ jobs:
         run: "vendor/bin/phpunit"
         env:
           DOCTRINE_MONGODB_SERVER: ${{ steps.setup-mongodb.outputs.cluster-uri }}
+          USE_LAZY_GHOST_OBJECTS: ${{ matrix.proxy == 'lazy-ghost' && '1' || '0' }}"

@@ -28,7 +28,6 @@ use MongoDB\Collection as MongoDBCollection;
 use MongoDB\Driver\WriteConcern;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
-use ProxyManager\Proxy\GhostObjectInterface;
 use ReflectionProperty;
 use Throwable;
 
@@ -489,7 +488,7 @@ class UnitOfWorkTest extends BaseTestCase
         $user = $this->dm->find(ForumUser::class, $id);
         self::assertInstanceOf(ForumUser::class, $user);
 
-        self::assertInstanceOf(GhostObjectInterface::class, $user->getAvatar());
+        self::assertTrue(self::isLazyObject($user->getAvatar()));
 
         $classMetadata = $this->dm->getClassMetadata(ForumAvatar::class);
 
@@ -511,8 +510,7 @@ class UnitOfWorkTest extends BaseTestCase
         try {
             $this->dm->flush();
         } catch (Throwable) {
-            $getCommitsInProgress = Closure::bind(fn (UnitOfWork $unitOfWork) => /** @psalm-suppress InaccessibleProperty */
-$unitOfWork->commitsInProgress, $this->dm->getUnitOfWork(), UnitOfWork::class);
+            $getCommitsInProgress = Closure::bind(fn (UnitOfWork $unitOfWork) => $unitOfWork->commitsInProgress, $this->dm->getUnitOfWork(), UnitOfWork::class);
 
             self::assertSame(0, $getCommitsInProgress($this->dm->getUnitOfWork()));
 

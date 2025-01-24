@@ -9,10 +9,12 @@ use Doctrine\ODM\MongoDB\Hydrator\HydratorFactory;
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadata;
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadataFactoryInterface;
 use Doctrine\ODM\MongoDB\Mapping\MappingException;
+use Doctrine\ODM\MongoDB\Proxy\Factory\LazyGhostProxyFactory;
 use Doctrine\ODM\MongoDB\Proxy\Factory\ProxyFactory;
 use Doctrine\ODM\MongoDB\Proxy\Factory\StaticProxyFactory;
 use Doctrine\ODM\MongoDB\Proxy\Resolver\CachingClassNameResolver;
 use Doctrine\ODM\MongoDB\Proxy\Resolver\ClassNameResolver;
+use Doctrine\ODM\MongoDB\Proxy\Resolver\LazyGhostProxyClassNameResolver;
 use Doctrine\ODM\MongoDB\Proxy\Resolver\ProxyManagerClassNameResolver;
 use Doctrine\ODM\MongoDB\Query\FilterCollection;
 use Doctrine\ODM\MongoDB\Repository\DocumentRepository;
@@ -50,8 +52,8 @@ use function trigger_deprecation;
  *     $config = new Configuration();
  *     $dm = DocumentManager::create(new Connection(), $config);
  *
- * @psalm-import-type CommitOptions from UnitOfWork
- * @psalm-import-type FieldMapping from ClassMetadata
+ * @phpstan-import-type CommitOptions from UnitOfWork
+ * @phpstan-import-type FieldMapping from ClassMetadata
  */
 class DocumentManager implements ObjectManager
 {
@@ -157,7 +159,9 @@ class DocumentManager implements ObjectManager
             ],
         );
 
-        $this->classNameResolver = new CachingClassNameResolver(new ProxyManagerClassNameResolver($this->config));
+        $this->classNameResolver = $config->isLazyGhostObjectEnabled()
+            ? new CachingClassNameResolver(new LazyGhostProxyClassNameResolver())
+            : new CachingClassNameResolver(new ProxyManagerClassNameResolver($this->config));
 
         $metadataFactoryClassName = $this->config->getClassMetadataFactoryName();
         $this->metadataFactory    = new $metadataFactoryClassName();
@@ -182,7 +186,9 @@ class DocumentManager implements ObjectManager
 
         $this->unitOfWork        = new UnitOfWork($this, $this->eventManager, $this->hydratorFactory);
         $this->schemaManager     = new SchemaManager($this, $this->metadataFactory);
-        $this->proxyFactory      = new StaticProxyFactory($this);
+        $this->proxyFactory      = $config->isLazyGhostObjectEnabled()
+            ? new LazyGhostProxyFactory($this, $config->getProxyDir(), $config->getProxyNamespace(), $config->getAutoGenerateProxyClasses())
+            : new StaticProxyFactory($this);
         $this->repositoryFactory = $this->config->getRepositoryFactory();
     }
 
@@ -287,14 +293,11 @@ class DocumentManager implements ObjectManager
     /**
      * Returns the metadata for a class.
      *
-     * @param string $className The class name.
-     * @psalm-param class-string<T> $className
+     * @param class-string<T> $className The class name.
      *
-     * @psalm-return ClassMetadata<T>
+     * @return ClassMetadata<T>
      *
      * @template T of object
-     *
-     * @psalm-suppress InvalidReturnType, InvalidReturnStatement see https://github.com/vimeo/psalm/issues/5788
      */
     public function getClassMetadata($className): ClassMetadata
     {
@@ -304,7 +307,7 @@ class DocumentManager implements ObjectManager
     /**
      * Returns the MongoDB instance for a class.
      *
-     * @psalm-param class-string $className
+     * @param class-string $className
      */
     public function getDocumentDatabase(string $className): Database
     {
@@ -554,11 +557,9 @@ class DocumentManager implements ObjectManager
     /**
      * Gets the repository for a document class.
      *
-     * @param string $className The name of the Document.
-     * @psalm-param class-string<T> $className
+     * @param class-string<T> $className The name of the Document.
      *
-     * @return DocumentRepository|GridFSRepository|ViewRepository  The repository.
-     * @psalm-return DocumentRepository<T>|GridFSRepository<T>|ViewRepository<T>
+     * @return DocumentRepository<T>|GridFSRepository<T>|ViewRepository<T>  The repository.
      *
      * @template T of object
      */
@@ -573,7 +574,7 @@ class DocumentManager implements ObjectManager
      * database.
      *
      * @param array $options Array of options to be used with batchInsert(), update() and remove()
-     * @psalm-param CommitOptions $options
+     * @phpstan-param CommitOptions $options
      *
      * @throws MongoDBException
      * @throws Throwable From event listeners.
@@ -592,19 +593,19 @@ class DocumentManager implements ObjectManager
      * has its identifier populated. Otherwise a proxy is returned that automatically
      * loads itself on first access.
      *
-     * @param mixed $identifier
-     * @psalm-param class-string<T> $documentName
+     * @param mixed           $identifier
+     * @param class-string<T> $documentName
      *
-     * @psalm-return T|(T&GhostObjectInterface<T>)
+     * @return T|(T&GhostObjectInterface<T>)
      *
      * @template T of object
      */
     public function getReference(string $documentName, $identifier): object
     {
-        /** @psalm-var ClassMetadata<T> $class */
+        /** @var ClassMetadata<T> $class */
         $class = $this->metadataFactory->getMetadataFor(ltrim($documentName, '\\'));
         assert($class instanceof ClassMetadata);
-        /** @psalm-var T|false $document */
+        /** @phpstan-var T|false $document */
         $document = $this->unitOfWork->tryGetById($identifier, $class);
 
         // Check identity map first, if its already in there just return it.
@@ -612,7 +613,7 @@ class DocumentManager implements ObjectManager
             return $document;
         }
 
-        /** @psalm-var T&GhostObjectInterface<T> $document */
+        /** @var T&GhostObjectInterface<T> $document */
         $document = $this->proxyFactory->getProxy($class, $identifier);
         $this->unitOfWork->registerManaged($document, $identifier, []);
 
@@ -659,13 +660,12 @@ class DocumentManager implements ObjectManager
      *
      * This is just a convenient shortcut for getRepository($documentName)->find($id).
      *
-     * @param string $className
-     * @param mixed  $id
-     * @param int    $lockMode
-     * @param int    $lockVersion
-     * @psalm-param class-string<T> $className
+     * @param class-string<T> $className
+     * @param mixed           $id
+     * @param int             $lockMode
+     * @param int             $lockVersion
      *
-     * @psalm-return T|null
+     * @return T|null
      *
      * @template T of object
      */
@@ -673,7 +673,6 @@ class DocumentManager implements ObjectManager
     {
         $repository = $this->getRepository($className);
         if ($repository instanceof DocumentRepository) {
-            /** @psalm-var DocumentRepository<T> $repository */
             return $repository->find($id, $lockMode, $lockVersion);
         }
 
@@ -746,7 +745,7 @@ class DocumentManager implements ObjectManager
     /**
      * Returns a reference to the supplied document.
      *
-     * @psalm-param FieldMapping $referenceMapping
+     * @phpstan-param FieldMapping $referenceMapping
      *
      * @return mixed The reference for the document in question, according to the desired mapping
      *
@@ -804,10 +803,9 @@ class DocumentManager implements ObjectManager
      *
      * @param array                 $referenceMapping Mappings of reference for which discriminator data is created.
      * @param ClassMetadata<object> $class            Metadata of reference document class.
-     * @psalm-param FieldMapping $referenceMapping
+     * @phpstan-param FieldMapping $referenceMapping
      *
-     * @return array with next structure [{discriminator field} => {discriminator value}]
-     * @psalm-return array<string, class-string>
+     * @return array<string, class-string> with next structure [{discriminator field} => {discriminator value}]
      *
      * @throws MappingException When discriminator map is present and reference class in not registered in it.
      */
@@ -893,7 +891,7 @@ class DocumentManager implements ObjectManager
      * @param FieldMapping              $mapping
      * @param array<string, mixed>|null $data
      *
-     * @psalm-return class-string
+     * @return class-string
      */
     public function getClassNameForAssociation(array $mapping, $data): string
     {

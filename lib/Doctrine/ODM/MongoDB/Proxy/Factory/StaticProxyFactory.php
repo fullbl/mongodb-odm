@@ -22,6 +22,8 @@ use function count;
 
 /**
  * This factory is used to create proxy objects for documents at runtime.
+ *
+ * @deprecated since 2.10, use LazyGhostProxyFactory instead
  */
 final class StaticProxyFactory implements ProxyFactory
 {
@@ -38,9 +40,9 @@ final class StaticProxyFactory implements ProxyFactory
 
     /**
      * @param mixed $identifier
-     * @psalm-param ClassMetadata<T> $metadata
+     * @phpstan-param ClassMetadata<T> $metadata
      *
-     * @psalm-return T&GhostObjectInterface<T>
+     * @return T&GhostObjectInterface<T>
      *
      * @template T of object
      */
@@ -86,7 +88,7 @@ final class StaticProxyFactory implements ProxyFactory
      * @param ClassMetadata<TDocument>     $metadata
      * @param DocumentPersister<TDocument> $documentPersister
      *
-     * @psalm-return Closure(
+     * @phpstan-return Closure(
      *   TDocument&GhostObjectInterface<TDocument>=,
      *   string=,
      *   array<string, mixed>=,
@@ -145,13 +147,21 @@ final class StaticProxyFactory implements ProxyFactory
      */
     private function skippedFieldsFqns(ClassMetadata $metadata): array
     {
-        $idFieldFqcns = [];
+        $skippedFieldsFqns = [];
 
         foreach ($metadata->getIdentifierFieldNames() as $idField) {
-            $idFieldFqcns[] = $this->propertyFqcn($metadata->getReflectionProperty($idField));
+            $skippedFieldsFqns[] = $this->propertyFqcn($metadata->getReflectionProperty($idField));
         }
 
-        return $idFieldFqcns;
+        foreach ($metadata->getReflectionClass()->getProperties() as $property) {
+            if ($metadata->hasField($property->getName())) {
+                continue;
+            }
+
+            $skippedFieldsFqns[] = $this->propertyFqcn($property);
+        }
+
+        return $skippedFieldsFqns;
     }
 
     private function propertyFqcn(ReflectionProperty $property): string

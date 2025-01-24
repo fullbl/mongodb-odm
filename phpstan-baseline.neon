@@ -546,6 +546,11 @@ parameters:
 			path: lib/Doctrine/ODM/MongoDB/Persisters/DocumentPersister.php
 
 		-
+			message: "#^Call to an undefined static method Doctrine\\\\ODM\\\\MongoDB\\\\Proxy\\\\Factory\\\\LazyGhostProxyFactory\\:\\:createLazyGhost\\(\\)\\.$#"
+			count: 1
+			path: lib/Doctrine/ODM/MongoDB/Proxy/Factory/LazyGhostProxyFactory.php
+
+		-
 			message: "#^Method Doctrine\\\\ODM\\\\MongoDB\\\\Proxy\\\\Factory\\\\StaticProxyFactory\\:\\:createInitializer\\(\\) should return Closure\\(ProxyManager\\\\Proxy\\\\GhostObjectInterface\\<TDocument\\>&TDocument\\=, string\\=, array\\<string, mixed\\>\\=, Closure\\|null\\=, array\\<string, mixed\\>\\=\\)\\: bool but returns Closure\\(ProxyManager\\\\Proxy\\\\GhostObjectInterface, string, array, mixed, array\\)\\: true\\.$#"
 			count: 1
 			path: lib/Doctrine/ODM/MongoDB/Proxy/Factory/StaticProxyFactory.php
@@ -956,12 +961,12 @@ parameters:
 			path: tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataLoadEventTest.php
 
 		-
-			message: "#^Parameter \\#1 \\$mapping of method Doctrine\\\\ODM\\\\MongoDB\\\\Mapping\\\\ClassMetadata\\<class@anonymous/tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataTest\\.php\\:231\\>\\:\\:mapField\\(\\) expects array\\{type\\?\\: string, fieldName\\?\\: string, name\\?\\: string, strategy\\?\\: string, association\\?\\: int, id\\?\\: bool, isOwningSide\\?\\: bool, collectionClass\\?\\: class\\-string, \\.\\.\\.\\}, array\\{fieldName\\: 'enum', enumType\\: 'Documents\\\\\\\\Card'\\} given\\.$#"
+			message: "#^Parameter \\#1 \\$mapping of method Doctrine\\\\ODM\\\\MongoDB\\\\Mapping\\\\ClassMetadata\\<class@anonymous/tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataTest\\.php\\:232\\>\\:\\:mapField\\(\\) expects array\\{type\\?\\: string, fieldName\\?\\: string, name\\?\\: string, strategy\\?\\: string, association\\?\\: int, id\\?\\: bool, isOwningSide\\?\\: bool, collectionClass\\?\\: class\\-string, \\.\\.\\.\\}, array\\{fieldName\\: 'enum', enumType\\: 'Documents\\\\\\\\Card'\\} given\\.$#"
 			count: 1
 			path: tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataTest.php
 
 		-
-			message: "#^Parameter \\#1 \\$mapping of method Doctrine\\\\ODM\\\\MongoDB\\\\Mapping\\\\ClassMetadata\\<class@anonymous/tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataTest\\.php\\:250\\>\\:\\:mapField\\(\\) expects array\\{type\\?\\: string, fieldName\\?\\: string, name\\?\\: string, strategy\\?\\: string, association\\?\\: int, id\\?\\: bool, isOwningSide\\?\\: bool, collectionClass\\?\\: class\\-string, \\.\\.\\.\\}, array\\{fieldName\\: 'enum', enumType\\: 'Documents\\\\\\\\SuitNonBacked'\\} given\\.$#"
+			message: "#^Parameter \\#1 \\$mapping of method Doctrine\\\\ODM\\\\MongoDB\\\\Mapping\\\\ClassMetadata\\<class@anonymous/tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataTest\\.php\\:251\\>\\:\\:mapField\\(\\) expects array\\{type\\?\\: string, fieldName\\?\\: string, name\\?\\: string, strategy\\?\\: string, association\\?\\: int, id\\?\\: bool, isOwningSide\\?\\: bool, collectionClass\\?\\: class\\-string, \\.\\.\\.\\}, array\\{fieldName\\: 'enum', enumType\\: 'Documents\\\\\\\\SuitNonBacked'\\} given\\.$#"
 			count: 1
 			path: tests/Doctrine/ODM/MongoDB/Tests/Mapping/ClassMetadataTest.php
 

@@ -9,10 +9,11 @@ use Doctrine\ODM\MongoDB\Aggregation\Expr;
 /**
  * Fluent interface for adding a $addFields stage to an aggregation pipeline.
  *
- * @psalm-import-type OperatorExpression from Expr
- * @psalm-type AddFieldsStageExpression = array{'$addFields': array<string, OperatorExpression|mixed>}
+ * @phpstan-import-type OperatorExpression from Expr
+ * @phpstan-type AddFieldsStageExpression array{'$addFields': array<string, OperatorExpression|mixed>}
+ * @final
  */
-final class AddFields extends Operator
+class AddFields extends Operator
 {
     /** @return AddFieldsStageExpression */
     public function getExpression(): array
