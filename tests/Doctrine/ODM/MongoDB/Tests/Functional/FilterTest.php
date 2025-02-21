@@ -343,7 +343,10 @@ class FilterTest extends BaseTestCase
         $testFilter->setParameter('field', 'password');
         $testFilter->setParameter('value', null);
 
-        $users = $this->dm->getRepository(User::class)->findBy(['username' => 'John']);
+        $users = $this->dm->createQueryBuilder(User::class)
+        ->field('username')
+        ->equals('John')
+        ->getQuery()->execute();
 
         self::assertCount(1, $users);
     }
