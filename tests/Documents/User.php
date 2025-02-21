@@ -16,6 +16,7 @@ use function bcadd;
 
 #[ODM\Document(collection: 'users')]
 #[ODM\InheritanceType('COLLECTION_PER_CLASS')]
+#[ODM\Index(keys: ['username' => 'text'])]
 class User extends BaseDocument
 {
     /** @var ObjectId|string|null */
@@ -24,7 +25,6 @@ class User extends BaseDocument
 
     /** @var string|null */
     #[ODM\Field(type: 'string')]
-    #[ODM\Index()]
     protected $username;
 
     /** @var string|null */
