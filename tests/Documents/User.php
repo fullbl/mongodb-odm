@@ -24,6 +24,7 @@ class User extends BaseDocument
 
     /** @var string|null */
     #[ODM\Field(type: 'string')]
+    #[ODM\Index()]
     protected $username;
 
     /** @var string|null */
