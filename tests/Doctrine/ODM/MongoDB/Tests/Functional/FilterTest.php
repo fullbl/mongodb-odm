@@ -346,8 +346,7 @@ class FilterTest extends BaseTestCase
         $builder = $this->dm->createAggregationBuilder(User::class)
         ->match()
         ->field('username')
-        ->equals('John');
-        
+        ->text('John');
 
         self::assertCount(1, $builder->getAggregation()->execute());
     }
