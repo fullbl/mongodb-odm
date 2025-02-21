@@ -334,4 +334,19 @@ class FilterTest extends BaseTestCase
          */
         self::assertEmpty($this->getUsernamesWithFindAll());
     }
+
+    public function testNullFilterOnStringField(): void
+    {
+        $this->fc->enable('testFilter');
+        $testFilter = $this->fc->getFilter('testFilter');
+        $testFilter->setParameter('class', User::class);
+        $testFilter->setParameter('field', 'password');
+        $testFilter->setParameter('value', null);
+
+        $qb    = $$this->dm->getRepository(User::class)->findBy(['username' => 'John']);
+        $query = $qb->getQuery();
+        $all   = $query->execute();
+
+        self::assertCount(1, $all);
+    }
 }
