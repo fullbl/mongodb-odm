@@ -343,11 +343,12 @@ class FilterTest extends BaseTestCase
         $testFilter->setParameter('field', 'password');
         $testFilter->setParameter('value', null);
 
-        $users = $this->dm->createQueryBuilder(User::class)
+        $builder = $this->dm->createAggregationBuilder(User::class)
+        ->match()
         ->field('username')
-        ->equals('John')
-        ->getQuery()->execute();
+        ->equals('John');
+        
 
-        self::assertCount(1, $users);
+        self::assertCount(1, $builder->getAggregation()->execute());
     }
 }
