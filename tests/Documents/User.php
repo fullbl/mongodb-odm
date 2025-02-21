@@ -16,7 +16,7 @@ use function bcadd;
 
 #[ODM\Document(collection: 'users')]
 #[ODM\InheritanceType('COLLECTION_PER_CLASS')]
-#[ODM\Index(keys: ['username' => 'text'])]
+#[ODM\SearchIndex(fields: ['username' => ['type' =>'text']])]
 class User extends BaseDocument
 {
     /** @var ObjectId|string|null */
