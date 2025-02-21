@@ -10,6 +10,7 @@ use Doctrine\ODM\MongoDB\Iterator\IterableResult;
 use Doctrine\ODM\MongoDB\Iterator\Iterator;
 use Doctrine\ODM\MongoDB\Mapping\ClassMetadata;
 use Doctrine\ODM\MongoDB\Persisters\DocumentPersister;
+use Doctrine\ODM\MongoDB\Query\CriteriaMerger;
 use Doctrine\ODM\MongoDB\Query\Expr as QueryExpr;
 use GeoJson\Geometry\Point;
 use MongoDB\Collection;
@@ -306,6 +307,8 @@ class Builder
             return $pipeline;
         }
 
+        
+
         if ($this->getStage(0) instanceof Stage\GeoNear) {
             $pipeline[0]['$geoNear']['query'] = $this->applyFilters($pipeline[0]['$geoNear']['query']);
 
@@ -314,6 +317,12 @@ class Builder
 
         $matchExpression = $this->applyFilters([]);
         if ($matchExpression !== []) {
+            if ($this->getStage(0) instanceof Stage\MatchStage) {
+                $merger = new CriteriaMerger;
+                $pipeline[0]['$match'] = $merger->merge($pipeline[0]['$match'], $matchExpression);
+
+                return $pipeline;
+            }
             array_unshift($pipeline, ['$match' => $matchExpression]);
         }
 
